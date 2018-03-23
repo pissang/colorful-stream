@@ -37,7 +37,7 @@ var config = {
     supersampling: 4,
     particleSize: 2,
     particleDensity: 128,
-    particleSpeed: 1
+    particleSpeed: 2
 };
 
 function generateSimplexField() {
@@ -162,11 +162,11 @@ function reset() {
 }
 var iterate = 0;
 function update(frameTime) {
-    frameTime = Math.min(frameTime, 50);
+    frameTime = Math.min(frameTime, 20);
     // if (streamSurface.particleSpeedScaling < 0.1) {
     //     return;
     // }
-    if (elpasedTime > 1000) {
+    if (elpasedTime > 5000) {
         streamSurface.generateSpawnTexture(128, 128);
         streamSurface.particleSpeedScaling = config.particleSpeed * (Math.random() + 0.2);
         // streamSurface.particleSpeedScaling /= 1.2;

@@ -125,7 +125,7 @@ void main()
         highp float fdx = texture2D(noiseTexture, p + vec2(d, 0)).x * 2.0 - 1.0 - f;
         highp float fdy = texture2D(noiseTexture, p + vec2(0, d)).x * 2.0 - 1.0 - f;
 
-        vec2 v = vec2(fdy, -fdx) * 0.1 * speedScaling * noiseTextureSize;
+        vec2 v = vec2(fdy, -fdx) * 0.01 * speedScaling * noiseTextureSize;
 
         pos.xy += v * deltaTime;
         pos.w -= deltaTime;

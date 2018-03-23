@@ -11,6 +11,8 @@ import PlaneGeometry from 'claygl/src/geometry/Plane';
 import FrameBuffer from 'claygl/src/FrameBuffer';
 import Line2DGeometry from './Line2D';
 
+import isMobile from './isMobile';
+
 
 import vectorFieldParticleGLSL from './vectorFieldParticle.glsl';
 
@@ -110,7 +112,7 @@ VectorFieldParticleSurface.prototype = {
 
     init: function () {
         var parameters = {
-            type: Texture.HALF_FLOAT,
+            type: isMobile ? Texture.HALF_FLOAT : Texture.FLOAT,
             minFilter: Texture.NEAREST,
             magFilter: Texture.NEAREST,
             useMipmap: false
