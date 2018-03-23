@@ -29,10 +29,10 @@ DropShadowSurface.prototype.update = function (renderer, sourceTexture) {
     var width = sourceTexture.width;
     var height = sourceTexture.height;
 
-    this._bwTexture.width = width / 2;
-    this._bwTexture.height = height / 2;
-    this._blurTexture.width = width / 2;
-    this._blurTexture.height = height / 2;
+    this._bwTexture.width = width / 4;
+    this._bwTexture.height = height / 4;
+    this._blurTexture.width = width / 4;
+    this._blurTexture.height = height / 4;
 
     var framebuffer = this._framebuffer;
     framebuffer.bind(renderer);
@@ -44,13 +44,13 @@ DropShadowSurface.prototype.update = function (renderer, sourceTexture) {
 
     framebuffer.attach(this._blurTexture);
     this._blurPass1.setUniform('texture', this._bwTexture);
-    this._blurPass1.setUniform('textureSize', [width / 2, height / 2]);
+    this._blurPass1.setUniform('textureSize', [width / 4, height / 4]);
     this._blurPass1.render(renderer);
 
 
     framebuffer.attach(this._bwTexture);
     this._blurPass2.setUniform('texture', this._blurTexture);
-    this._blurPass2.setUniform('textureSize', [width / 2, height / 2]);
+    this._blurPass2.setUniform('textureSize', [width / 4, height / 4]);
     this._blurPass2.render(renderer);
 
     framebuffer.unbind(renderer);

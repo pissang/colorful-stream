@@ -1,16 +1,17 @@
-@export stream.velocity
+@export stream.particle.fragment
 
-uniform sampler2D velTexture;
+uniform sampler2D particleTexture;
 uniform sampler2D spawnTexture;
-uniform sampler2D forceTexture;
-uniform sampler2D posTexture;
+uniform sampler2D velocityTexture;
 
 uniform float deltaTime;
 uniform float elapsedTime;
-uniform bool firstFrame;
 
-uniform float forceScaling = 1.0;
+uniform float speedScaling = 1.0;
+
+uniform vec2 textureSize;
 uniform vec4 region = vec4(0, 0, 1, 1);
+uniform bool firstFrame;
 
 varying vec2 v_Texcoord;
 
@@ -22,60 +23,33 @@ highp float rand(vec2 uv) {
 
 void main()
 {
-    vec4 v = texture2D(velTexture, v_Texcoord);
-    vec4 p = texture2D(posTexture, v_Texcoord);
-
+    vec4 p = texture2D(particleTexture, v_Texcoord);
     bool spawn = false;
     if (p.w <= 0.0 || firstFrame) {
-        vec4 tmp = texture2D(spawnTexture, fract(v_Texcoord * region.zw + region.xy + elapsedTime));
-        v.xy = tmp.zw;
-        p.xy = tmp.xy;
+        p = texture2D(spawnTexture, fract(v_Texcoord * region.zw + region.xy + elapsedTime));
         spawn = true;
-
-        v.z = -(dot(normalize(v.xy), vec2(0.0, 1.0)) + 1.0) * 0.5;
+        // if (firstFrame) {
+        //     p.w -= rand(v_Texcoord) * 5.0;
+        // }
     }
-    vec4 tmp = texture2D(forceTexture, p.xy);
-    if (!spawn) {
-        v.z = abs(v.z);
-    }
-    vec2 f = tmp.xy;
-    v.xy += f / 100.0 * forceScaling;
+    vec2 jitter = (vec2(
+        rand(v_Texcoord + elapsedTime),
+        rand(v_Texcoord + elapsedTime + 0.2)
+    ) * 2.0 - 1.0) / 200.0 * p.w;
+    vec4 tmp = texture2D(velocityTexture, p.xy);
 
-    gl_FragColor = v;
-}
-@end
+    vec2 v = tmp.xy;
+    p.xy += v * deltaTime / 10.0 * speedScaling;
+    p.w -= deltaTime;
 
-@export stream.position
-
-uniform sampler2D posTexture;
-uniform sampler2D velTexture;
-uniform sampler2D spawnTexture;
-
-uniform float deltaTime;
-uniform float elapsedTime;
-uniform bool firstFrame;
-
-uniform float life = 3;
-
-uniform float speedScaling = 1.0;
-uniform vec4 region = vec4(0, 0, 1, 1);
-
-varying vec2 v_Texcoord;
-
-void main()
-{
-    vec4 v = texture2D(velTexture, v_Texcoord);
-    vec4 p = texture2D(posTexture, v_Texcoord);
-    if (p.w <= 0.0 || firstFrame) {
-        p.xy = texture2D(spawnTexture, fract(v_Texcoord * region.zw + region.xy + elapsedTime)).xy;
-        p.w = life;
+    if (spawn) {
+        // Not show spawn particle
+        p.z = -(dot(normalize(v.xy), vec2(0.0, 1.0)) + 1.0) * 0.5;
     }
     else {
-        p.w -= deltaTime;
+        p.z = abs(p.z);
     }
 
-    p.z = v.z;
-    p.xy += v.xy * deltaTime / 50.0 * speedScaling;
     gl_FragColor = p;
 }
 @end
@@ -86,7 +60,7 @@ void main()
 
 attribute vec2 texcoord : TEXCOORD_0;
 
-uniform sampler2D posTexture;
+uniform sampler2D particleTexture;
 uniform mat4 worldViewProjection : WORLDVIEWPROJECTION;
 
 uniform float size = 1.0;
@@ -95,7 +69,7 @@ varying float v_Mag;
 
 void main()
 {
-    vec4 p = texture2D(posTexture, texcoord);
+    vec4 p = texture2D(particleTexture, texcoord);
 
     // PENDING If ignore 0 length vector
     if (p.w > 0.0 && p.z > 1e-5) {
@@ -131,7 +105,7 @@ void main()
     }
 #endif
 #ifdef GRADIENTTEXTURE_ENABLED
-    gl_FragColor *= texture2D(gradientTexture, vec2(fract(colorOffset + v_Mag), 0.5));
+    gl_FragColor *= texture2D(gradientTexture, vec2(fract(v_Mag + colorOffset), 0.5));
 #endif
 }
 
@@ -143,8 +117,8 @@ void main()
 
 attribute vec3 position : POSITION;
 
-uniform sampler2D posTexture;
-uniform sampler2D prevPosTexture;
+uniform sampler2D particleTexture;
+uniform sampler2D prevParticleTexture;
 
 uniform float size = 1.0;
 uniform vec4 vp: VIEWPORT;
@@ -154,8 +128,8 @@ varying float v_Mag;
 
 void main()
 {
-    vec4 p = texture2D(posTexture, position.xy);
-    vec4 p2 = texture2D(prevPosTexture, position.xy);
+    vec4 p = texture2D(particleTexture, position.xy);
+    vec4 p2 = texture2D(prevParticleTexture, position.xy);
 
     p.xy = p.xy * 2.0 - 1.0;
     p2.xy = p2.xy * 2.0 - 1.0;
@@ -193,7 +167,7 @@ void main()
 {
     gl_FragColor = color;
 #ifdef GRADIENTTEXTURE_ENABLED
-    gl_FragColor *= texture2D(gradientTexture, vec2(fract(colorOffset + v_Mag), 0.5));
+    gl_FragColor *= texture2D(gradientTexture, vec2(fract(v_Mag + colorOffset), 0.5));
 #endif
 }
 
@@ -239,11 +213,11 @@ void main() {
 uniform sampler2D texture;
 varying vec2 v_Texcoord;
 
-uniform vec4 color = vec4(0.0, 0.0, 0.0, 1);
+uniform vec4 color = vec4(0.0, 0.0, 0.0, 0.5);
 
 void main() {
     vec4 texel = texture2D(texture, v_Texcoord);
-    if (texel.a > 0.5) {
+    if (texel.a > 0.1) {
         gl_FragColor = color;
     }
     else {

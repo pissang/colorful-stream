@@ -14,9 +14,6 @@ import Line2DGeometry from './Line2D';
 
 import vectorFieldParticleGLSL from './vectorFieldParticle.glsl';
 
-var MARGIN = 0.2;
-var EXTENDED_SIZE = 1 + MARGIN * 2;
-
 Shader['import'](vectorFieldParticleGLSL);
 
 function createSpriteCanvas(size) {
@@ -39,16 +36,15 @@ var VectorFieldParticleSurface = function () {
      * Vector field lookup image
      * @type {clay.Texture2D}
      */
-    this.vectorFieldTexture = new Texture2D({
+    this.forceFieldTexture = new Texture2D({
         type: Texture.FLOAT,
         flipY: false
     });
 
     /**
      * Particle life range
-     * @type {Array.<number>}
      */
-    this.particleLife = [5, 20];
+    this.particleLife = 3;
 
     this.colorOffset = 0;
 
@@ -68,16 +64,20 @@ var VectorFieldParticleSurface = function () {
      * @type {number}
      */
     this.particleSpeedScaling = 1.0;
+    /**
+     * @type {number}
+     */
+    this.particleForceScaling = 1.0;
 
     /**
      * @type {clay.Texture2D}
      */
     this._thisFrameTexture = null;
 
-    this._particlePass = null;
+    this._noisePass = null;
     this.spawnTexture = null;
-    this._particleTexture0 = null;
-    this._particleTexture1 = null;
+    this._posTexture0 = null;
+    this._posTexture1 = null;
 
     this._particlePointsMesh = null;
 
@@ -117,19 +117,31 @@ VectorFieldParticleSurface.prototype = {
         };
         this.spawnTexture = new Texture2D(parameters);
 
-        this._particleTexture0 = new Texture2D(parameters);
-        this._particleTexture1 = new Texture2D(parameters);
+        this.noiseTexture = new Texture2D(parameters);
+        this.noiseTexture.width = 256;
+        this.noiseTexture.height = 256;
+        this.noiseTexture.wrapS = Texture.CLAMP_TO_EDGE;
+        this.noiseTexture.wrapT = Texture.CLAMP_TO_EDGE;
+
+        this._posTexture0 = new Texture2D(parameters);
+        this._posTexture1 = new Texture2D(parameters);
 
         this._frameBuffer = new FrameBuffer({
             depthBuffer: false
         });
+        this._noisePass = new Pass({
+            fragment: Shader.source('stream.noise')
+        });
         this._particlePass = new Pass({
-            fragment: Shader.source('stream.particle.fragment')
+            fragment: Shader.source('stream.updateParticle')
         });
 
         this._downsamplePass = new Pass({
             fragment: Shader.source('stream.downsample')
         });
+
+        this._noisePass.setUniform('region', [0.25, 0.25, 0.5, 0.5]);
+        this._particlePass.setUniform('region', [0.25, 0.25, 0.5, 0.5]);
 
         var particlePointsMesh = new Mesh({
             // Render after last frame full quad
@@ -189,63 +201,48 @@ VectorFieldParticleSurface.prototype = {
             this._setPointsGeometry(width, height);
         }
 
+        this._posTexture0.width = this._posTexture1.width = width;
+        this._posTexture0.height = this._posTexture1.height = height;
 
-        this._particleTexture0.width = this._particleTexture1.width = width;
-        this._particleTexture0.height = this._particleTexture1.height = height;
-
-        this._particlePass.setUniform('textureSize', [width, height]);
+        this._noisePass.setUniform('textureSize', [width, height]);
     },
 
-    generateSpawnTexture: function (width, height, randomOutside) {
+    generateSpawnTexture: function (width, height) {
         var nVertex = width * height;
         var spawnTextureData = new Float32Array(nVertex * 4);
         var off = 0;
         var lifeRange = this.particleLife;
-
+        if (typeof lifeRange === 'number') {
+            lifeRange = [lifeRange, lifeRange];
+        }
 
         var randomInitPositions = [];
-        for (var i = 0; i < 10; i++) {
-            randomInitPositions.push(randomPosition());
+        for (var i = 0; i < 2; i++) {
+            randomInitPositions.push([
+                Math.random(), Math.random()
+            ]);
         }
-        var k = 0;
-
         function randomPosition() {
             var x;
             var y;
-            if (randomOutside) {
-                do {
-                    x = Math.random() * EXTENDED_SIZE - MARGIN;
-                    y = Math.random() * EXTENDED_SIZE - MARGIN;
-                } while (x > 0 && x < 1 && y < 1 & y > 0);
-            }
-            else {
-                x = Math.random();
-                y = Math.random();
-            }
+            do {
+                x = Math.random() * 2.0 - 0.5;
+                y = Math.random() * 2.0 - 0.5;
+            } while (x > 0 && x < 1 && y < 1 & y > 0);
 
             return [x, y];
         }
 
-        if (randomOutside) {
-            this._particlePass.setUniform('region', [MARGIN / EXTENDED_SIZE, MARGIN / EXTENDED_SIZE, 1 / EXTENDED_SIZE, 1 / EXTENDED_SIZE]);
-        }
-        else {
-            this._particlePass.setUniform('region', [0, 0, 1, 1]);
-        }
-
+        var k = 0;
         for (var i = 0; i < width; i++) {
             for (var j = 0; j < height; j++, off++) {
-                var pos = randomPosition();
-                // var pos = randomInitPositions[k++ % 10];
-                // var pos = randomInitPositions[k++ % 20];
-                // spawnTextureData[off * 4] = i / width;
-                // spawnTextureData[off * 4] = pos[0] + (Math.random() - 0.5) * 0.2;
-                spawnTextureData[off * 4] = Math.random();
-                // spawnTextureData[off * 4 + 1] = rand + (Math.random() - 0.5) * 0.1;
-                // spawnTextureData[off * 4 + 1] = pos[1] + (Math.random() - 0.5) * 0.2;
-                spawnTextureData[off * 4 + 1] = Math.random();
-                // Some property
-                spawnTextureData[off * 4 + 2] = Math.random();
+                // var pos = randomPosition();
+                var pos = randomInitPositions[k++ % 2];
+                // x position, range [0 - 1]
+                spawnTextureData[off * 4] = pos[0] + Math.random() * 0.2 - 0.1;
+                // y position, range [0 - 2]
+                spawnTextureData[off * 4 + 1] = pos[1] + Math.random() * 0.2 - 0.1;
+                spawnTextureData[off * 4 + 2] = 0;
                 var life = (lifeRange[1] - lifeRange[0]) * Math.random() + lifeRange[0];
                 // Particle life
                 spawnTextureData[off * 4 + 3] = life;
@@ -297,6 +294,7 @@ VectorFieldParticleSurface.prototype = {
 
         var particleMesh = this._getParticleMesh();
         var frameBuffer = this._frameBuffer;
+        var noisePass = this._noisePass;
         var particlePass = this._particlePass;
 
         var firstFrame = frame === 0;
@@ -305,32 +303,41 @@ VectorFieldParticleSurface.prototype = {
             this._updateDownsampleTextures(renderer);
         }
 
-        particleMesh.material.set('size', this._particleSize * this._supersampling);
-        particleMesh.material.set('color', this.particleColor);
-        particlePass.setUniform('velocityTexture', this.vectorFieldTexture);
-        particlePass.setUniform('spawnTexture', this.spawnTexture);
+        frameBuffer.bind(renderer);
+        if (!this.noiseTexture.pixels) {
+            frameBuffer.attach(this.noiseTexture);
+            noisePass.setUniform('forceScaling', this.particleForceScaling);
+            noisePass.setUniform('forceTexture', this.forceFieldTexture);
+            noisePass.render(renderer);
+        }
+
+        frameBuffer.attach(this._posTexture1);
         particlePass.setUniform('speedScaling', this.particleSpeedScaling);
-
-        frameBuffer.attach(this._particleTexture1);
-        particlePass.setUniform('firstFrame', firstFrame);
-        particlePass.setUniform('particleTexture', this._particleTexture0);
+        particlePass.setUniform('posTexture', this._posTexture0);
+        particlePass.setUniform('noiseTexture', this.noiseTexture);
+        particlePass.setUniform('spawnTexture', this.spawnTexture);
         particlePass.setUniform('deltaTime', deltaTime);
-        particlePass.setUniform('elapsedTime', this._elapsedTime);
-        particlePass.render(renderer, frameBuffer);
-
-        particleMesh.material.set('particleTexture', this._particleTexture1);
-        particleMesh.material.set('prevParticleTexture', this._particleTexture0);
-        particleMesh.material.set('colorOffset', this.colorOffset);
+        particlePass.setUniform('firstFrame', frame === 0);
+        particlePass.setUniform('noiseTextureSize', this.noiseTexture.width);
+        particlePass.render(renderer);
 
         frameBuffer.attach(this._thisFrameTexture);
-        frameBuffer.bind(renderer);
         renderer.gl.clear(renderer.gl.DEPTH_BUFFER_BIT | renderer.gl.COLOR_BUFFER_BIT);
+        this._camera.update(true);
+
         var lastFrameFullQuad = this._lastFrameFullQuadMesh;
         lastFrameFullQuad.material.set('texture', this._lastFrameTexture);
         lastFrameFullQuad.material.set('color', [1, 1, 1, this.motionBlurFactor]);
 
-        this._camera.update(true);
+        particleMesh.material.set('size', this._particleSize * this._supersampling);
+        particleMesh.material.set('color', this.particleColor);
+        particleMesh.material.set('colorOffset', this.colorOffset);
+
+        particleMesh.material.set('posTexture', this._posTexture1);
+        particleMesh.material.set('prevPosTexture', this._posTexture0);
+
         renderer.renderPass([lastFrameFullQuad, particleMesh], this._camera);
+
         frameBuffer.unbind(renderer);
 
         this._downsample(renderer);
@@ -365,6 +372,10 @@ VectorFieldParticleSurface.prototype = {
         return downsampleTextures.length > 0
             ? downsampleTextures[downsampleTextures.length - 1]
             : this._lastFrameTexture;
+    },
+
+    setRegion: function (region) {
+        this._noisePass.setUniform('region', region);
     },
 
     resize: function (width, height) {
@@ -439,9 +450,9 @@ VectorFieldParticleSurface.prototype = {
     },
 
     _swapTexture: function () {
-        var tmp = this._particleTexture0;
-        this._particleTexture0 = this._particleTexture1;
-        this._particleTexture1 = tmp;
+        var tmp = this._posTexture0;
+        this._posTexture0 = this._posTexture1;
+        this._posTexture1 = tmp;
 
         var tmp = this._thisFrameTexture;
         this._thisFrameTexture = this._lastFrameTexture;
@@ -451,10 +462,10 @@ VectorFieldParticleSurface.prototype = {
     dispose: function (renderer) {
         renderer.disposeFrameBuffer(this._frameBuffer);
         // Dispose textures
-        renderer.disposeTexture(this.vectorFieldTexture);
+        renderer.disposeTexture(this.forceFieldTexture);
         renderer.disposeTexture(this.spawnTexture);
-        renderer.disposeTexture(this._particleTexture0);
-        renderer.disposeTexture(this._particleTexture1);
+        renderer.disposeTexture(this._posTexture0);
+        renderer.disposeTexture(this._posTexture1);
         renderer.disposeTexture(this._thisFrameTexture);
         renderer.disposeTexture(this._lastFrameTexture);
 
@@ -466,7 +477,6 @@ VectorFieldParticleSurface.prototype = {
             renderer.disposeTexture(this._spriteTexture);
         }
 
-        this._particlePass.dispose(renderer);
         this._downsamplePass.dispose(renderer);
 
         this._downsampleTextures.forEach(function (texture) {

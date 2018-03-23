@@ -30,7 +30,7 @@ var config = {
     supersampling: 4,
     particleSize: 3,
     particleDensity: 128,
-    particleSpeed: 5
+    particleSpeed: 2
 };
 
 function generateSimplexField() {
@@ -43,13 +43,13 @@ function generateSimplexField() {
         for (var y = 0; y < N; y++) {
             var m = x / M * scale;
             var n = y / N * scale;
+            // https://gist.github.com/jaycody/9502284
             var angle = simplex.noise2D(m, n) * Math.PI;
-            var r = simplex2.noise2D(m, n) * 0.5 + 0.5;
-            var vx = Math.cos(angle) * r;
-            var vy = Math.sin(angle) * r;
+            var vx = Math.cos(angle);
+            var vy = Math.sin(angle);
             values[i++] = vx;
             values[i++] = vy;
-            values[i++] = (simplex2.noise2D(m, n) + 1) * 0.5;
+            values[i++] = (x / (M - 1) + y / (N - 1)) / 2;
             values[i++] = 1;
         }
     }
@@ -65,6 +65,7 @@ function randomColor() {
 
 function generateGradientImage() {
     var canvas = document.createElement('canvas');
+    var color = interpolateRainbow(Math.random());
     canvas.width = 32;
     canvas.height = 6;
     var ctx = canvas.getContext('2d');
@@ -102,7 +103,7 @@ function createMaterial() {
     });
 }
 
-var forceFieldTexture = new Texture2D({
+var vectorFieldTexture = new Texture2D({
     type: Texture.FLOAT,
     flipY: false,
     width: M,
@@ -118,17 +119,19 @@ streamSurface.setSupersampling(config.supersampling);
 streamSurface.setParticleType(config.particleType);
 streamSurface.setParticleSize(config.particleSize);
 streamSurface.particleSpeedScaling = config.particleSpeed;
-streamSurface.particleLife = 5;
+streamSurface.particleLife = [5, 18];
 
 streamSurface.setParticleDensity(config.particleDensity, config.particleDensity);
-streamSurface.forceFieldTexture = forceFieldTexture;
+streamSurface.vectorFieldTexture = vectorFieldTexture;
 streamSurface.setGradientTexture(gradientTexture);
-streamSurface.generateSpawnTexture(128, 128);
+streamSurface.generateSpawnTexture(256, 256, true);
 
 var backgroundQuad = new Mesh({
     material: createMaterial(),
     geometry: planeGeo
 });
+// Already multiplied alpha.
+backgroundQuad.material.transparent = false;
 var shadowQuad = new Mesh({
     material: createMaterial(),
     geometry: planeGeo
@@ -164,13 +167,13 @@ function reset() {
 var iterate = 0;
 function update(frameTime) {
     frameTime = Math.min(frameTime, 50);
-    if (streamSurface.particleSpeedScaling < 1) {
+    if (streamSurface.particleSpeedScaling < 0.2) {
         return;
     }
     if (elpasedTime > 5000) {
-        streamSurface.generateSpawnTexture(128, 128);
+        streamSurface.generateSpawnTexture(256, 256, true);
         // streamSurface.particleSpeedScaling = config.particleSpeed * (Math.random() + 0.2);
-        streamSurface.particleSpeedScaling /= 1.2;
+        streamSurface.particleSpeedScaling /= 1.1;
         streamSurface.colorOffset = Math.random();
         bakeBackground();
         reset();
@@ -183,7 +186,7 @@ function update(frameTime) {
     shadowQuad.material.set('texture', shadowSurface.getSurfaceTexture());
 
     backgroundQuad.material.set('texture', bakedTexture);
-    // backgroundQuad.material.set('texture', forceFieldTexture);
+    // backgroundQuad.material.set('texture', vectorFieldTexture);
 
     frame++;
 
