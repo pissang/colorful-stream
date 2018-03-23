@@ -12,7 +12,15 @@ import Mesh from 'claygl/src/Mesh';
 import Material from 'claygl/src/Material';
 import FrameBuffer from 'claygl/src/FrameBuffer';
 
-import { interpolateRainbow } from 'd3-scale-chromatic';
+import * as colorBrewer from 'd3-scale-chromatic';
+
+var brewerMethods = [
+    'BrBG', 'PRGn', 'PiYG', 'PuOr', 'RdBu', 'RdGy', 'RdYlBu', 'RdYlGn', 'Spectral',
+    'Viridis', 'Inferno', 'Magma', 'Plasma', 'Warm', 'Cool', 'Rainbow', 'YlGnBu', 'RdPu', 'PuRd',
+    'Rainbow'
+].map(function (a) {
+    return 'interpolate' + a;
+});
 
 var M = 200;
 
@@ -26,7 +34,7 @@ var config = {
     seed: Math.random(),
     scale: 1,
     particleType: 'line',
-    supersampling: 4,
+    supersampling: 2,
     particleSize: 3,
     particleDensity: 128,
     particleSpeed: 1
@@ -66,8 +74,9 @@ function generateGradientImage() {
     var gradient = ctx.createLinearGradient(0, canvas.height / 2, canvas.width, canvas.height / 2);
 
     var colorList = [];
+    var method = colorBrewer[brewerMethods[Math.round(Math.random() * (brewerMethods.length - 1))]];
     for (var i = 0; i < 10; i++) {
-        colorList.push(interpolateRainbow(i / 9));
+        colorList.push(method(i / 9));
     }
     for (var i = 0; i < colorList.length; i++) {
         gradient.addColorStop(i / (colorList.length - 1), colorList[i]);

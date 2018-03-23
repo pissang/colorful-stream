@@ -31,7 +31,7 @@ var VectorFieldParticleSurface = function () {
     /**
      * @type {number}
      */
-    this.motionBlurFactor = 0.995;
+    this.motionBlurFactor = 1;
     /**
      * Vector field lookup image
      * @type {clay.Texture2D}
@@ -217,7 +217,7 @@ VectorFieldParticleSurface.prototype = {
         }
 
         var randomInitPositions = [];
-        for (var i = 0; i < 2; i++) {
+        for (var i = 0; i < 4; i++) {
             randomInitPositions.push([
                 Math.random(), Math.random()
             ]);
@@ -237,11 +237,13 @@ VectorFieldParticleSurface.prototype = {
         for (var i = 0; i < width; i++) {
             for (var j = 0; j < height; j++, off++) {
                 // var pos = randomPosition();
-                var pos = randomInitPositions[k++ % 2];
+                var pos = randomInitPositions[k++ % 4];
+                var angle = Math.random() * Math.PI * 2;
+                var r = Math.random() * 0.1;
                 // x position, range [0 - 1]
-                spawnTextureData[off * 4] = pos[0] + Math.random() * 0.2 - 0.1;
+                spawnTextureData[off * 4] = pos[0] + Math.cos(angle) * r;
                 // y position, range [0 - 2]
-                spawnTextureData[off * 4 + 1] = pos[1] + Math.random() * 0.2 - 0.1;
+                spawnTextureData[off * 4 + 1] = pos[1] + Math.sin(angle) * r;
                 spawnTextureData[off * 4 + 2] = 0;
                 var life = (lifeRange[1] - lifeRange[0]) * Math.random() + lifeRange[0];
                 // Particle life
