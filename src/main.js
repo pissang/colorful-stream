@@ -1,5 +1,5 @@
 import VectorFieldSurface from './VectorFieldSurface';
-import DropShadowSurface from './DropShadowSurface';
+// import DropShadowSurface from './DropShadowSurface';
 import SimplexNoise from 'simplex-noise';
 import Timeline from 'claygl/src/Timeline';
 import Renderer from 'claygl/src/Renderer';
@@ -12,7 +12,7 @@ import Mesh from 'claygl/src/Mesh';
 import Material from 'claygl/src/Material';
 import FrameBuffer from 'claygl/src/FrameBuffer';
 
-import { interpolateSpectral } from 'd3-scale-chromatic';
+import { interpolateRainbow } from 'd3-scale-chromatic';
 
 var M = 200;
 var N = 200;
@@ -27,9 +27,9 @@ var config = {
     seed: Math.random(),
     scale: 2,
     particleType: 'line',
-    supersampling: 2,
+    supersampling: 4,
     particleSize: 3,
-    particleDensity: 128,
+    particleDensity: 256,
     particleSpeed: 2
 };
 
@@ -49,7 +49,7 @@ function generateSimplexField() {
             var vy = Math.sin(angle);
             values[i++] = vx;
             values[i++] = vy;
-            values[i++] = (simplex2.noise2D(m, n) + 1) * 0.5;
+            values[i++] = (x / (M - 1) + y / (N - 1)) / 2;
             values[i++] = 1;
         }
     }
@@ -65,6 +65,7 @@ function randomColor() {
 
 function generateGradientImage() {
     var canvas = document.createElement('canvas');
+    var color = interpolateRainbow(Math.random());
     canvas.width = 32;
     canvas.height = 6;
     var ctx = canvas.getContext('2d');
@@ -72,7 +73,7 @@ function generateGradientImage() {
 
     var colorList = [];
     for (var i = 0; i < 10; i++) {
-        colorList.push(interpolateSpectral(i / 9));
+        colorList.push(interpolateRainbow(i / 9));
     }
     for (var i = 0; i < colorList.length; i++) {
         gradient.addColorStop(i / (colorList.length - 1), colorList[i]);
@@ -113,26 +114,28 @@ var gradientTexture = new Texture2D({
     image: generateGradientImage()
 });
 var streamSurface = new VectorFieldSurface();
-var shadowSurface = new DropShadowSurface();
+// var shadowSurface = new DropShadowSurface();
 streamSurface.setSupersampling(config.supersampling);
 streamSurface.setParticleType(config.particleType);
 streamSurface.setParticleSize(config.particleSize);
 streamSurface.particleSpeedScaling = config.particleSpeed;
-streamSurface.particleLife = [5, 5];
+streamSurface.particleLife = [5, 18];
 
 streamSurface.setParticleDensity(config.particleDensity, config.particleDensity);
 streamSurface.vectorFieldTexture = vectorFieldTexture;
 streamSurface.setGradientTexture(gradientTexture);
-streamSurface.generateSpawnTexture(256, 256);
+streamSurface.generateSpawnTexture(256, 256, true);
 
 var backgroundQuad = new Mesh({
     material: createMaterial(),
     geometry: planeGeo
 });
-var shadowQuad = new Mesh({
-    material: createMaterial(),
-    geometry: planeGeo
-});
+// Already multiplied alpha.
+backgroundQuad.material.transparent = false;
+// var shadowQuad = new Mesh({
+//     material: createMaterial(),
+//     geometry: planeGeo
+// });
 
 var streamQuad = new Mesh({
     material: createMaterial(),
@@ -163,23 +166,24 @@ function reset() {
 }
 var iterate = 0;
 function update(frameTime) {
-    if (streamSurface.particleSpeedScaling < 0.2) {
-        return;
-    }
-    if (elpasedTime > 5000) {
-        streamSurface.generateSpawnTexture(256, 256);
-        // streamSurface.particleSpeedScaling = config.particleSpeed * (Math.random() + 0.2);
-        streamSurface.particleSpeedScaling /= 1.2;
-        streamSurface.colorOffset = Math.random();
-        bakeBackground();
-        reset();
-        iterate++;
-    }
+    frameTime = Math.min(frameTime, 50);
+    // if (streamSurface.particleSpeedScaling < 0.2) {
+    //     return;
+    // }
+    // if (elpasedTime > 5000) {
+    //     streamSurface.generateSpawnTexture(256, 256, true);
+    //     // streamSurface.particleSpeedScaling = config.particleSpeed * (Math.random() + 0.2);
+    //     streamSurface.particleSpeedScaling /= 1.1;
+    //     streamSurface.colorOffset = Math.random();
+    //     bakeBackground();
+    //     reset();
+    //     iterate++;
+    // }
 
     streamSurface.update(renderer, frameTime, frame);
     streamQuad.material.set('texture', streamSurface.getSurfaceTexture());
-    shadowSurface.update(renderer, streamSurface.getSurfaceTexture());
-    shadowQuad.material.set('texture', shadowSurface.getSurfaceTexture());
+    // shadowSurface.update(renderer, streamSurface.getSurfaceTexture());
+    // shadowQuad.material.set('texture', shadowSurface.getSurfaceTexture());
 
     backgroundQuad.material.set('texture', bakedTexture);
     // backgroundQuad.material.set('texture', vectorFieldTexture);
@@ -187,7 +191,7 @@ function update(frameTime) {
     frame++;
 
     camera.update(true);
-    renderer.renderPass([backgroundQuad, shadowQuad, streamQuad], camera);
+    renderer.renderPass([backgroundQuad, streamQuad], camera);
 
     elpasedTime += frameTime;
 }

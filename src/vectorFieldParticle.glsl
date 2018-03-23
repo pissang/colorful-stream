@@ -15,6 +15,12 @@ uniform bool firstFrame;
 
 varying vec2 v_Texcoord;
 
+highp float rand(vec2 uv) {
+    const highp float a = 12.9898, b = 78.233, c = 43758.5453;
+    highp float dt = dot(uv.xy, vec2(a,b)), sn = mod(dt, 3.141592653589793);
+    return fract(sin(sn) * c);
+}
+
 void main()
 {
     vec4 p = texture2D(particleTexture, v_Texcoord);
@@ -22,18 +28,27 @@ void main()
     if (p.w <= 0.0 || firstFrame) {
         p = texture2D(spawnTexture, fract(v_Texcoord * region.zw + region.xy + elapsedTime));
         spawn = true;
+        if (firstFrame) {
+            p.w -= rand(v_Texcoord) * 10.0;
+        }
     }
+    vec2 jitter = (vec2(
+        rand(v_Texcoord + elapsedTime),
+        rand(v_Texcoord + elapsedTime + 0.2)
+    ) * 2.0 - 1.0) / 200.0 * p.w;
     vec4 tmp = texture2D(velocityTexture, p.xy);
+
+    vec2 v = tmp.xy;
+    p.xy += v * deltaTime / 10.0 * speedScaling;
+    p.w -= deltaTime;
+
     if (spawn) {
         // Not show spawn particle
-        p.z = -tmp.z;
+        p.z = -(dot(normalize(v.xy), vec2(0.0, 1.0)) + 1.0) * 0.5;
     }
     else {
         p.z = abs(p.z);
     }
-    vec2 v = tmp.xy;
-    p.xy += v * deltaTime / 10.0 * speedScaling;
-    p.w -= deltaTime;
 
     gl_FragColor = p;
 }
@@ -198,7 +213,7 @@ void main() {
 uniform sampler2D texture;
 varying vec2 v_Texcoord;
 
-uniform vec4 color = vec4(0.0, 0.0, 0.0, 1);
+uniform vec4 color = vec4(0.0, 0.0, 0.0, 0.5);
 
 void main() {
     vec4 texel = texture2D(texture, v_Texcoord);

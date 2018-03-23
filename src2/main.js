@@ -10,8 +10,9 @@ import Shader from 'claygl/src/Shader';
 import PlaneGeometry from 'claygl/src/geometry/Plane';
 import Mesh from 'claygl/src/Mesh';
 import Material from 'claygl/src/Material';
+import FrameBuffer from 'claygl/src/FrameBuffer';
 
-import { interpolatePlasma } from 'd3-scale-chromatic';
+import { interpolateRainbow } from 'd3-scale-chromatic';
 
 var M = 200;
 var N = 200;
@@ -24,24 +25,17 @@ timeline.start();
 
 var config = {
     seed: Math.random(),
-    scale: 0.2,
+    scale: 1,
     particleType: 'line',
-    supersampling: 2,
+    supersampling: 4,
     particleSize: 3,
     particleDensity: 128,
-    particleSpeed: 1
+    particleSpeed: 5
 };
 
 function generateSimplexField() {
-    var simplex = new SimplexNoise(function () {
-        return config.seed;
-    });
-    var simplex2 = new SimplexNoise(function () {
-        return config.seed + 0.5;
-    });
-    var simplex3 = new SimplexNoise(function () {
-        return config.seed2 + 0.8;
-    });
+    var simplex = new SimplexNoise(Math.random);
+    var simplex2 = new SimplexNoise(Math.random);
     var scale = Math.max(config.scale, 1);
     var values = new Float32Array(M * N * 4);
     var i = 0;
@@ -49,9 +43,13 @@ function generateSimplexField() {
         for (var y = 0; y < N; y++) {
             var m = x / M * scale;
             var n = y / N * scale;
-            values[i++] = simplex.noise2D(m, n);
-            values[i++] = simplex2.noise2D(m, n);
-            values[i++] = (simplex3.noise2D(m, n) + 1) * 0.5;
+            var angle = simplex.noise2D(m, n) * Math.PI;
+            var r = simplex2.noise2D(m, n) * 0.5 + 0.5;
+            var vx = Math.cos(angle) * r;
+            var vy = Math.sin(angle) * r;
+            values[i++] = vx;
+            values[i++] = vy;
+            values[i++] = (simplex2.noise2D(m, n) + 1) * 0.5;
             values[i++] = 1;
         }
     }
@@ -74,7 +72,7 @@ function generateGradientImage() {
 
     var colorList = [];
     for (var i = 0; i < 10; i++) {
-        colorList.push(interpolatePlasma(i / 9));
+        colorList.push(interpolateRainbow(i / 9));
     }
     for (var i = 0; i < colorList.length; i++) {
         gradient.addColorStop(i / (colorList.length - 1), colorList[i]);
@@ -86,13 +84,13 @@ function generateGradientImage() {
 
 var camera = new OrthoCamera();
 
+var bakedTexture = new Texture2D();
+var bakedTexture2 = new Texture2D();
+
 var quadShader = new Shader(
     Shader.source('clay.compositor.vertex'),
     Shader.source('stream.output')
 );
-var quads = [];
-var streamQuads = [];
-var shadowQuads = [];
 var planeGeo = new PlaneGeometry();
 
 function createMaterial() {
@@ -114,70 +112,99 @@ var forceFieldTexture = new Texture2D({
 var gradientTexture = new Texture2D({
     image: generateGradientImage()
 });
-// TODO texture pool.
-for (var i = 0; i < 10; i++) {
-    var streamSurface = new VectorFieldSurface();
-    var shadowSurface = new DropShadowSurface();
-    streamSurface.setSupersampling(config.supersampling);
-    streamSurface.setParticleType(config.particleType);
-    streamSurface.setParticleSize(config.particleSize);
-    streamSurface.particleSpeedScaling = config.particleSpeed;
-    streamSurface.particleLife = 10;
+var streamSurface = new VectorFieldSurface();
+var shadowSurface = new DropShadowSurface();
+streamSurface.setSupersampling(config.supersampling);
+streamSurface.setParticleType(config.particleType);
+streamSurface.setParticleSize(config.particleSize);
+streamSurface.particleSpeedScaling = config.particleSpeed;
+streamSurface.particleLife = 5;
 
-    streamSurface.setParticleDensity(config.particleDensity, config.particleDensity);
-    streamSurface.forceFieldTexture = forceFieldTexture;
-    streamSurface.setGradientTexture(gradientTexture);
-    streamSurface.generateSpawnTexture(256, 256);
+streamSurface.setParticleDensity(config.particleDensity, config.particleDensity);
+streamSurface.forceFieldTexture = forceFieldTexture;
+streamSurface.setGradientTexture(gradientTexture);
+streamSurface.generateSpawnTexture(128, 128);
 
-    var shadowQuad = new Mesh({
-        material: createMaterial(),
-        geometry: planeGeo
-    });
-    shadowQuad.surface = shadowSurface;
+var backgroundQuad = new Mesh({
+    material: createMaterial(),
+    geometry: planeGeo
+});
+var shadowQuad = new Mesh({
+    material: createMaterial(),
+    geometry: planeGeo
+});
 
-    var streamQuad = new Mesh({
-        material: createMaterial(),
-        geometry: planeGeo
-    });
-    streamQuad.surface = streamSurface;
-
-    quads.push(shadowQuad);
-    quads.push(streamQuad);
-
-    shadowQuads.push(shadowQuad);
-    streamQuads.push(streamQuad);
-}
+var streamQuad = new Mesh({
+    material: createMaterial(),
+    geometry: planeGeo
+});
 
 var frame = 0;
 var elpasedTime = 0;
+
+var frameBuffer = new FrameBuffer({
+    depthBuffer: false
+});
+function bakeBackground() {
+    frameBuffer.bind(renderer);
+    frameBuffer.attach(bakedTexture2);
+    renderer.renderPass([backgroundQuad, shadowQuad, streamQuad], camera);
+    frameBuffer.unbind(renderer);
+
+    var tmp = bakedTexture;
+    bakedTexture = bakedTexture2;
+    bakedTexture2 = tmp;
+}
+
+function reset() {
+    frame = 0;
+    streamSurface.clearFrame(renderer);
+    elpasedTime = 0;
+}
+var iterate = 0;
 function update(frameTime) {
-    var idx = Math.floor(elpasedTime / 5000);
-    var streamQuad = streamQuads[idx];
-    var shadowQuad = shadowQuads[idx];
-    if (!streamQuad) {
-        renderer.renderPass(quads, camera);
+    frameTime = Math.min(frameTime, 50);
+    if (streamSurface.particleSpeedScaling < 1) {
         return;
     }
+    if (elpasedTime > 5000) {
+        streamSurface.generateSpawnTexture(128, 128);
+        // streamSurface.particleSpeedScaling = config.particleSpeed * (Math.random() + 0.2);
+        streamSurface.particleSpeedScaling /= 1.2;
+        streamSurface.colorOffset = Math.random();
+        bakeBackground();
+        reset();
+        iterate++;
+    }
 
-    streamQuad.surface.update(renderer, frameTime, frame);
-    streamQuad.material.set('texture', streamQuad.surface.getSurfaceTexture());
-    shadowQuad.surface.update(renderer, streamQuad.surface.getSurfaceTexture());
-    shadowQuad.material.set('texture', shadowQuad.surface.getSurfaceTexture());
+    streamSurface.update(renderer, frameTime, frame);
+    streamQuad.material.set('texture', streamSurface.getSurfaceTexture());
+    shadowSurface.update(renderer, streamSurface.getSurfaceTexture());
+    shadowQuad.material.set('texture', shadowSurface.getSurfaceTexture());
+
+    backgroundQuad.material.set('texture', bakedTexture);
+    // backgroundQuad.material.set('texture', forceFieldTexture);
 
     frame++;
 
     camera.update(true);
-    renderer.renderPass(quads, camera);
+    renderer.renderPass([backgroundQuad, shadowQuad, streamQuad], camera);
 
     elpasedTime += frameTime;
 }
 
 function resize() {
-    renderer.resize(renderer.canvas.clientWidth, renderer.canvas.clientHeight);
-    streamQuads.forEach(function (quad) {
-        quad.surface.clearFrame(renderer);
-        quad.surface.resize(renderer.getWidth(), renderer.getHeight());
-    });
+    reset();
+    var width = renderer.canvas.clientWidth;
+    var height = renderer.canvas.clientHeight;
+    renderer.resize(width, height);
+    streamSurface.resize(width, height);
+
+    bakedTexture.width = width;
+    bakedTexture.height = height;
+
+    bakedTexture2.width = width;
+    bakedTexture2.height = height;
 }
 
 timeline.on('frame', update);

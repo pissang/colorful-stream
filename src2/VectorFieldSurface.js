@@ -31,7 +31,7 @@ var VectorFieldParticleSurface = function () {
     /**
      * @type {number}
      */
-    this.motionBlurFactor = 1;
+    this.motionBlurFactor = 0.995;
     /**
      * Vector field lookup image
      * @type {clay.Texture2D}
@@ -43,9 +43,10 @@ var VectorFieldParticleSurface = function () {
 
     /**
      * Particle life range
-     * @type {Array.<number>}
      */
     this.particleLife = 3;
+
+    this.colorOffset = 0;
 
     this._particleType = 'point';
 
@@ -135,6 +136,9 @@ VectorFieldParticleSurface.prototype = {
             fragment: Shader.source('stream.downsample')
         });
 
+        this._velPass.setUniform('region', [0.25, 0.25, 0.5, 0.5]);
+        this._posPass.setUniform('region', [0.25, 0.25, 0.5, 0.5]);
+
         var particlePointsMesh = new Mesh({
             // Render after last frame full quad
             renderOrder: 10,
@@ -212,16 +216,28 @@ VectorFieldParticleSurface.prototype = {
                 Math.random(), Math.random()
             ]);
         }
+        function randomPosition() {
+            var x;
+            var y;
+            do {
+                x = Math.random() * 2.0 - 0.5;
+                y = Math.random() * 2.0 - 0.5;
+            } while (x > 0 && x < 1 && y < 1 & y > 0);
+
+            return [x, y];
+        }
+
         var k = 0;
         for (var i = 0; i < width; i++) {
             for (var j = 0; j < height; j++, off++) {
-                var pos = randomInitPositions[k++ % 10];
+                var pos = randomPosition();
                 var targetAngle = Math.atan2(0.5 - pos[1], 0.5 - pos[0]);
                 // x position, range [0 - 1]
-                spawnTextureData[off * 4] = pos[0] + (Math.random() - 0.5) * 0.1;
+                spawnTextureData[off * 4] = 0.5;
                 // y position, range [0 - 1]
-                spawnTextureData[off * 4 + 1] = pos[1] + (Math.random() - 0.5) * 0.1;
-                var angle = Math.random() * Math.PI / 2 - Math.PI / 4 + targetAngle;
+                spawnTextureData[off * 4 + 1] = 0.5;
+                // var angle = Math.random() * Math.PI / 2 - Math.PI / 4 + targetAngle;
+                var angle = Math.random() * Math.PI * 2;
                 var r = Math.random() * 2;
                 // x velocity
                 spawnTextureData[off * 4 + 2] = Math.cos(angle) * r;
@@ -286,6 +302,7 @@ VectorFieldParticleSurface.prototype = {
 
         particleMesh.material.set('size', this._particleSize * this._supersampling);
         particleMesh.material.set('color', this.particleColor);
+        particleMesh.material.set('colorOffset', this.colorOffset);
 
         frameBuffer.bind(renderer);
         frameBuffer.attach(this._velTexture1);
@@ -296,6 +313,7 @@ VectorFieldParticleSurface.prototype = {
         velPass.setUniform('velTexture', this._velTexture0);
         velPass.setUniform('deltaTime', deltaTime);
         velPass.setUniform('elapsedTime', this._elapsedTime);
+        velPass.setUniform('firstFrame', frame === 0);
         velPass.render(renderer);
 
         particleMesh.material.set('posTexture', this._posTexture1);
@@ -310,6 +328,7 @@ VectorFieldParticleSurface.prototype = {
         posPass.setUniform('deltaTime', deltaTime);
         posPass.setUniform('elapsedTime', this._elapsedTime);
         posPass.setUniform('life', this.particleLife);
+        posPass.setUniform('firstFrame', frame === 0);
         posPass.render(renderer);
 
         frameBuffer.attach(this._thisFrameTexture);
