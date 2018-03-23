@@ -86,12 +86,12 @@ float fBm_noise(vec2 x){
 
 void main()
 {
-    vec2 p = (v_Texcoord * 2.0 - 1.0) * 2.0;
+    vec2 p = (v_Texcoord * 2.0 - 1.0);
     p.x += sin(elapsedTime * turbulence.x);
     p.y += cos(elapsedTime * turbulence.y);
 
     vec3 f = vec3(0.0);
-    f.x = fBm_noise(p);
+    f.x = fBm_noise(p) * 0.5 + 0.5;
 
     gl_FragColor = vec4(f, 1.0);
 }
@@ -114,29 +114,30 @@ varying vec2 v_Texcoord;
 
 void main()
 {
-    vec4 pos = texture2D(posTexture, v_Texcoord);
+    highp vec4 pos = texture2D(posTexture, v_Texcoord);
 
     if(pos.w > 0.0 && !firstFrame){
-        vec2 p = pos.xy * 0.5 + 0.5;
+        vec2 p = pos.xy;
         float d = 1.0 / noiseTextureSize;
         // https://www.cs.ubc.ca/~rbridson/docs/bridson-siggraph2007-curlnoise.pdf
-        float f = texture2D(noiseTexture, p).x;
+        highp float f = texture2D(noiseTexture, p).x * 2.0 - 1.0;
 
-        float fdx = texture2D(noiseTexture, p + vec2(d, 0)).x - f;
-        float fdy = texture2D(noiseTexture, p + vec2(0, d)).x - f;
+        highp float fdx = texture2D(noiseTexture, p + vec2(d, 0)).x * 2.0 - 1.0 - f;
+        highp float fdy = texture2D(noiseTexture, p + vec2(0, d)).x * 2.0 - 1.0 - f;
 
-        vec2 v = vec2(fdy, -fdx) * 0.01 * speedScaling * noiseTextureSize;
+        vec2 v = vec2(fdy, -fdx) * 0.1 * speedScaling * noiseTextureSize;
 
         pos.xy += v * deltaTime;
         pos.w -= deltaTime;
 
-        if (pos.z < 0.0) {
+        if (pos.z < 0.5) {
             pos.z = (dot(normalize(v), vec2(0.0, 1.0)) + 1.0) * 0.5;
+            pos.z = pos.z * 0.5 + 0.5;
         }
     }
     else {
         pos = texture2D(spawnTexture, v_Texcoord);
-        pos.z = -1.0;
+        pos.z = 0.1;
     }
 
     gl_FragColor = pos;
@@ -161,14 +162,14 @@ void main()
     vec4 p = texture2D(posTexture, texcoord);
 
     // PENDING If ignore 0 length vector
-    if (p.w > 0.0 && p.z > 1e-5) {
+    if (p.w > 0.0 && p.z >= 0.5) {
         gl_Position = worldViewProjection * vec4(p.xy * 2.0 - 1.0, 0.0, 1.0);
     }
     else {
         gl_Position = vec4(100000.0, 100000.0, 100000.0, 1.0);
     }
 
-    v_Mag = p.z;
+    v_Mag = p.z * 2.0 - 1.0;
 
     gl_PointSize = size;
 }
@@ -224,16 +225,16 @@ void main()
     p2.xy = p2.xy * 2.0 - 1.0;
 
     // PENDING If ignore 0 length vector
-    if (p.w > 0.0 && p.z > 1e-5) {
+    if (p.w > 0.0 && p.z >= 0.5) {
         vec2 dir = normalize(p.xy - p2.xy);
         vec2 norm = vec2(dir.y / vp.z, -dir.x / vp.w) * sign(position.z) * size;
         if (abs(position.z) == 2.0) {
             gl_Position = vec4(p.xy + norm, 0.0, 1.0);
-            v_Mag = p.z;
+            v_Mag = p.z * 2.0 - 1.0;
         }
         else {
             gl_Position = vec4(p2.xy + norm, 0.0, 1.0);
-            v_Mag = p2.z;
+            v_Mag = p2.z * 2.0 - 1.0;
         }
         gl_Position = worldViewProjection * gl_Position;
     }

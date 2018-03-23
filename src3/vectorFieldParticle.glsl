@@ -27,6 +27,7 @@ void main()
     bool spawn = false;
     if (p.w <= 0.0 || firstFrame) {
         p = texture2D(spawnTexture, fract(v_Texcoord * region.zw + region.xy + elapsedTime));
+        p.xy = p.xy * 0.5 + 0.5;
         spawn = true;
         // if (firstFrame) {
         //     p.w -= rand(v_Texcoord) * 5.0;

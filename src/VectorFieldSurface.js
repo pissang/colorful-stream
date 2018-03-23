@@ -36,7 +36,7 @@ var VectorFieldParticleSurface = function () {
      * Vector field lookup image
      * @type {clay.Texture2D}
      */
-    this.forceFieldTexture = new Texture2D({
+    this.noiseTexture = new Texture2D({
         type: Texture.FLOAT,
         flipY: false
     });
@@ -110,12 +110,13 @@ VectorFieldParticleSurface.prototype = {
 
     init: function () {
         var parameters = {
-            type: Texture.FLOAT,
+            type: Texture.HALF_FLOAT,
             minFilter: Texture.NEAREST,
             magFilter: Texture.NEAREST,
             useMipmap: false
         };
         this.spawnTexture = new Texture2D(parameters);
+        this.spawnTexture.type = Texture.FLOAT;
 
         this.noiseTexture = new Texture2D(parameters);
         this.noiseTexture.width = 256;
@@ -308,8 +309,6 @@ VectorFieldParticleSurface.prototype = {
         frameBuffer.bind(renderer);
         if (!this.noiseTexture.pixels) {
             frameBuffer.attach(this.noiseTexture);
-            noisePass.setUniform('forceScaling', this.particleForceScaling);
-            noisePass.setUniform('forceTexture', this.forceFieldTexture);
             noisePass.render(renderer);
         }
 
@@ -319,7 +318,7 @@ VectorFieldParticleSurface.prototype = {
         particlePass.setUniform('noiseTexture', this.noiseTexture);
         particlePass.setUniform('spawnTexture', this.spawnTexture);
         particlePass.setUniform('deltaTime', deltaTime);
-        particlePass.setUniform('firstFrame', frame === 0);
+        particlePass.setUniform('firstFrame', firstFrame);
         particlePass.setUniform('noiseTextureSize', this.noiseTexture.width);
         particlePass.render(renderer);
 

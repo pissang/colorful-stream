@@ -34,8 +34,8 @@ var config = {
     seed: Math.random(),
     scale: 1,
     particleType: 'line',
-    supersampling: 2,
-    particleSize: 3,
+    supersampling: 4,
+    particleSize: 2,
     particleDensity: 128,
     particleSpeed: 1
 };
@@ -166,7 +166,7 @@ function update(frameTime) {
     // if (streamSurface.particleSpeedScaling < 0.1) {
     //     return;
     // }
-    if (elpasedTime > 5000) {
+    if (elpasedTime > 1000) {
         streamSurface.generateSpawnTexture(128, 128);
         streamSurface.particleSpeedScaling = config.particleSpeed * (Math.random() + 0.2);
         // streamSurface.particleSpeedScaling /= 1.2;
@@ -194,16 +194,18 @@ function update(frameTime) {
 
 function resize() {
     reset();
-    var width = renderer.canvas.clientWidth;
-    var height = renderer.canvas.clientHeight;
+    var width = document.body.clientWidth;
+    var height = document.body.clientHeight;
     renderer.resize(width, height);
     streamSurface.resize(width, height);
 
-    bakedTexture.width = width;
-    bakedTexture.height = height;
+    var dpr = renderer.getDevicePixelRatio();
 
-    bakedTexture2.width = width;
-    bakedTexture2.height = height;
+    bakedTexture.width = width * dpr;
+    bakedTexture.height = height * dpr;
+
+    bakedTexture2.width = width * dpr;
+    bakedTexture2.height = height * dpr;
 }
 
 timeline.on('frame', update);
